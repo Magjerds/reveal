@@ -17,9 +17,10 @@ export class Image360UI {
   private viewer: Cognite3DViewer;
   private gui: dat.GUI;
   private entities: Image360[] = [];
-  private selectedEntity: Image360 | undefined;
+  public selectedEntity: Image360 | undefined;
   private _lastAnnotation: Image360Annotation | undefined = undefined;
   private _collections: Image360Collection[] = [];
+  public showAnnotatedImagesFlag: boolean = false;
 
   private async handleIntersectionAsync(intersectionPromise: Promise<Image360AnnotationIntersection | null>) {
     const intersection = await intersectionPromise;
@@ -38,15 +39,17 @@ export class Image360UI {
   }
 
   private params = {
-    siteId: getSiteIdFromUrl() ?? '', // For instance: helideck-site-2-jpeg
-    space: getSpaceFromUrl() ?? '',
+     //THESIS ADDED CODE HERE:
+    siteId: "YOUR SIDE ID HERE,
+    space: "NA",
     add: () => this.add360ImageSet(),
     remove: () => this.remove360ImageSet(),
     premultipliedRotation: false,
     removeAll: () => this.removeAll360Images(),
     saveToUrl: () => this.saveImage360SiteToUrl(),
     assetId: '',
-    findAsset: () => this.findAsset()
+    findAsset: () => this.findAsset(),
+    toggleAnnotatedImages: () => this.toggleAnnotatedImages()
   };
 
   private translation = {
@@ -56,7 +59,8 @@ export class Image360UI {
   };
 
   private dataSource: { type: 'events' | 'dataModels' } = {
-    type: getSpaceFromUrl() !== null && getSpaceFromUrl() !== '' ? 'dataModels' : 'events'
+     //THESIS CHANGED CODE HERE:
+    type: "events"
   };
 
   private rotation = {
@@ -67,7 +71,7 @@ export class Image360UI {
   };
 
   private opacity = {
-    alpha: 1
+    alpha: 0.2
   };
 
   private iconCulling = {
@@ -126,6 +130,7 @@ export class Image360UI {
 
     this.gui.add(this.opacity, 'alpha', 0, 1, 0.01).onChange(() => {
       this.entities.forEach(p => (p.image360Visualization.opacity = this.opacity.alpha));
+      console.log('Changed opacity', this.opacity.alpha);
       this.viewer.requestRedraw();
     });
 
@@ -158,6 +163,8 @@ export class Image360UI {
 
     this.gui.add(this.params, 'saveToUrl').name('Save 360 site to URL');
     this.gui.add(this.params, 'removeAll').name('Remove all 360 images');
+
+
 
     gui
       .add(this.imageRevisions, 'targetDate')
@@ -214,6 +221,19 @@ export class Image360UI {
     this.viewer.on('click', event => this.onAnnotationClicked(event));
     this._collections.push(collection);
     this.entities = this.entities.concat(collection.image360Entities);
+
+     //THESIS ADDED CODE HERE:
+    // Set opacity for each 360 image in the collection
+    this.entities.forEach(p => {
+      if (p.image360Visualization) {
+        p.image360Visualization.opacity = 0.01;
+        // Log the current state of the image360Visualization object
+      } else {
+        console.error(`Entity with id: ${p.id} does not have image360Visualization property`);
+      }
+    });
+  
+
 
     this.viewer.requestRedraw();
   }
@@ -280,6 +300,36 @@ export class Image360UI {
       url.searchParams.set('space', params.space);
     }
     window.history.replaceState(null, document.title, url.toString());
+  }
+  //THESIS ADDED CODE HERE:
+  public async toggleAnnotatedImages() {
+    this.showAnnotatedImagesFlag = !this.showAnnotatedImagesFlag; // Toggle the flag
+    console.log("Show annotated images flag:", this.showAnnotatedImagesFlag);
+    this.remove360ImageSet();
+
+    if (this.showAnnotatedImagesFlag) {
+      console.log("Adding annotated images");
+     if(this.params.siteId.length === 0) return;
+     const new_collection = await this.viewer.add360ImageSet("events", { site_id: this.params.siteId });
+     this.remove360ImageSet();
+
+     //Now filter based on annotations
+     const annotatedImages = await Promise.all(new_collection.image360Entities.map(async image => {
+      const activeRevision = image.getActiveRevision();
+      const annotations =  await activeRevision.getAnnotations();
+      return annotations !== undefined && annotations.length > 0 ? image : null;
+      }));
+      // Filter out null values
+      const filteredImages = annotatedImages.filter(image => image !== null);
+      console.log("Filtered Collections:", filteredImages);
+
+    }
+
+    else {
+      //should add from the orignal params
+      this.add360ImageSet();
+    }
+    this.viewer.requestRedraw();
   }
 
   async findAsset() {

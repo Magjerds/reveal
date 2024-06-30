@@ -37,7 +37,10 @@ import { Image360StylingUI } from '../utils/Image360StylingUI';
 import { LoadGltfUi } from '../utils/LoadGltfUi';
 import { createFunnyButton } from '../utils/PageVariationUtils';
 import { getCogniteClient } from '../utils/example-helpers';
+import {getBoxGroup} from "../utils/MaikenAnnotationMatcherUI";
+import { AnnotationMatcherUI } from '../utils/MaikenAnnotationMatcherUI';
 
+window.THREE = THREE;
 (window as any).reveal = reveal;
 
 export function Viewer() {
@@ -134,6 +137,8 @@ export function Viewer() {
       viewer.on('beforeSceneRendered', () => stats.begin());
       viewer.on('sceneRendered', () => stats.end());
 
+     
+
       const controlsOptions: CameraControlsOptions = {
         changeCameraTargetOnClick: false,
         mouseWheelAction: 'zoomToCursor'
@@ -219,6 +224,7 @@ export function Viewer() {
           new NodeTransformUI(viewer, gui.addFolder(`Node transform #${modelUi.cadModels.length}`), model);
           new BulkHtmlOverlayUI(gui.addFolder(`Node tagging #${modelUi.cadModels.length}`), viewer, model, client);
         } else if (model instanceof CognitePointCloudModel) {
+          console.log("We are in the point cloud model",model)
           const modelIndex = modelUi.pointCloudModels.length;
           new PointCloudClassificationFilterUI(gui.addFolder(`Class filter #${modelIndex}`), model);
           pointCloudUi.applyToAllModels();
@@ -227,10 +233,17 @@ export function Viewer() {
             model,
             viewer,
             client
-          );
+          )
+          // THESIS ADDED CODE HERE:
+          const boxGroup = new THREE.Group();
+          model.traverseStylableObjects(obj => boxGroup.add(new THREE.Box3Helper(obj.boundingBox)));
+          viewer.addObject3D(boxGroup);
+          const point_cloud_model_id = "YOUR ID HERE";
+          getBoxGroup(client, model, viewer, 'threedmodel', [{ id: point_cloud_model_id }])
         }
+        console.log("Model added:", model);
       }
-      const modelUi = new ModelUi(gui.addFolder('Models'), viewer, handleModelAdded);
+      
 
       const renderGui = gui.addFolder('Rendering');
       const renderModes = [
@@ -352,7 +365,8 @@ export function Viewer() {
         guiState.debug.stats.renderTime = sceneRenderedEventArgs.renderTime;
         debugStatsGui.updateDisplay();
       });
-
+      const modelUi = new ModelUi(gui.addFolder('Models'), viewer, handleModelAdded);
+      
       debugGui.add(guiActions, 'showCameraHelper').name('Show camera');
       debugGui
         .add(guiState.debug, 'suspendLoading')
@@ -390,7 +404,11 @@ export function Viewer() {
       await modelUi.restoreModelsFromUrl();
       const image360Ui = new Image360UI(viewer, gui.addFolder('360 Images'));
       new Image360StylingUI(image360Ui, gui.addFolder('360 annotation styling'));
-
+      // THESIS ADDED CODE HERE:
+      if (modelUi.pointCloudModels.length > 0) {
+        new AnnotationMatcherUI(viewer, gui.addFolder("Annotation Matching"), image360Ui, client, modelUi.pointCloudModels[0]);
+      }
+      
       const controlsGui = gui.addFolder('Camera controls');
       const mouseWheelActionTypes = ['zoomToCursor', 'zoomPastCursor', 'zoomToTarget'];
       const cameraManagerTypes = ['Default', 'Custom'];
@@ -423,7 +441,7 @@ export function Viewer() {
 
       new MeasurementUi(viewer, gui.addFolder('Measurement'));
       new LoadGltfUi(gui.addFolder('GLTF'), viewer);
-
+      
       viewer.on('click', async event => {
         const { offsetX, offsetY } = event;
         const start = performance.now();
@@ -464,6 +482,7 @@ export function Viewer() {
 
                   pointCloudObjectsUi.createModelAnnotation(point, model);
                 }
+                
               }
               break;
           }
